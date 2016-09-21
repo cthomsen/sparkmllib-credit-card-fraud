@@ -164,6 +164,10 @@ Die von Spark MLlib bereitgestellten Classificator Algorithmen bestehen stets au
     model transform test select ("prediction", "label") map (r => r(0).toString.toDouble -> r(1).toString.toDouble)
 ```
 
+Um die Qualität eines Modells mit einem Datensatz zu testen teilt man diesen üblicherweise in einen Trainingsdatensatz und einen Testdatensatz.
+
+![Data Mining Process](https://github.com/cthomsen/sparkmllib-credit-card-fraud/blob/master/dm-process.png)
+
 ## Aufgabe - Vorhersage von Kreditkartenbetrug
 
 Gegeben sind etwa 150.000 Buchungsdatensätze von denen etwa 1.500 als Betrugsfälle markiert sind.
