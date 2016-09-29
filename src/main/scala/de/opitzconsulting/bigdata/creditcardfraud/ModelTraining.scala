@@ -100,22 +100,25 @@ object ModelTraining {
     toVectorRDD(test) map (r => (model predict r.features, r.label))
 
   def trainRandomForest(training: DataFrame) =
-    RandomForest trainClassifier (toVectorRDD(training), 2, Map[Int, Int](), 30, "auto", "gini", 10, 32)
+    RandomForest trainClassifier (toVectorRDD(training), 2, Map[Int, Int](), 50, "auto", "gini", 10, 32)
 
   def testRandomForest(model: RandomForestModel, test: DataFrame) =
     toVectorRDD(test) map (r => (model predict r.features, r.label))
 
   def trainNaiveBayes(training: DataFrame) = {
     val nb = new NaiveBayes
-    nb setSmoothing 5.0
+    nb setSmoothing 3.0
     nb fit training
   }
 
   def testNaiveBayes(model: NaiveBayesModel, test: DataFrame) =
     model transform test select ("prediction", "label") map (r => r(0).toString.toDouble -> r(1).toString.toDouble)
 
-  def trainSVM(training: DataFrame) =
-    SVMWithSGD train (toVectorRDD(training), 100000, 0.001, 0.8)
+  def trainSVM(training: DataFrame) = {
+    val training2 = toVectorRDD(training)
+    training2.cache
+    SVMWithSGD train (training2, 1000, 0.1, 0.5)
+  }
 
   def testSVM(model: SVMModel, test: DataFrame) =
     toVectorRDD(test) map (r => (model predict r.features, r.label))
@@ -131,9 +134,6 @@ object ModelTraining {
     println(s"True negatives: $trueNegatives")
     println(s"False negatives: $falseNegatives")
     println(s"Kosten: ${"%.2f" format (falsePositives * 5.16 + falseNegatives * 125.08)} €")
-    //val metrics = new BinaryClassificationMetrics(prediction)
-    //metrics.precisionByThreshold.foreach { case (t, p) => println(s"Threshold: $t, Precision: $p")}
-    //metrics.recallByThreshold.foreach { case (t, r) => println(s"Threshold: $t, Recall: $r") }
   }
 
   def toVectorRDD(dataFrame: DataFrame) =
