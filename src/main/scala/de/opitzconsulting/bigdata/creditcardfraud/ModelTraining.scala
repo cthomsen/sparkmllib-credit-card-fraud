@@ -5,9 +5,9 @@ import java.text.SimpleDateFormat
 import java.util.{Calendar, GregorianCalendar}
 
 import org.apache.spark.SparkContext
-import org.apache.spark.ml.classification.LogisticRegression
-import org.apache.spark.ml.classification.LogisticRegressionModel
+import org.apache.spark.ml.classification.{NaiveBayesModel, NaiveBayes, LogisticRegression, LogisticRegressionModel}
 import org.apache.spark.ml.regression.{LinearRegressionModel, LinearRegression}
+import org.apache.spark.mllib.classification.{SVMModel, SVMWithSGD}
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{RandomForest, DecisionTree}
@@ -21,22 +21,26 @@ object ModelTraining {
     val Array(training, test) = data randomSplit (Array(0.7, 0.3))
     training.cache
     test.cache
-    val predictionNullHypothesis0 = test select ("label") map (r => 0.0 -> r(0).toString.toDouble)
-    val predictionNullHypothesis1 = test select ("label") map (r => 1.0 -> r(0).toString.toDouble)
+    val predictionNullHypothesis = test select ("label") map (r => 0.0 -> r(0).toString.toDouble)
     val modelLogisticRegression = trainLogisticRegression(training)
     val predictionLogisticRegression = testLogisticRegression(modelLogisticRegression, test)
     val modelLinearRegression = trainLinearRegression(training)
     val predictionLinearRegression = testLinearRegression(modelLinearRegression, test)
-    val modelDecisonTree = trainDecisonTree(training, SparkUtils.getSparkContext, SparkUtils.getSparkSQLContext)
+    val modelDecisonTree = trainDecisonTree(training)
     val predictionDecisionTree = testDecisonTree(modelDecisonTree, test)
-    val modelRandomForest = trainRandomForest(training, SparkUtils.getSparkContext, SparkUtils.getSparkSQLContext)
+    val modelRandomForest = trainRandomForest(training)
     val predictionRandomForest = testRandomForest(modelRandomForest, test)
-    printResults(predictionNullHypothesis0, "Null Hypothese (alle negativ)")
-    printResults(predictionNullHypothesis1, "Null Hypothese (alle positiv)")
+    val modelNaiveBayes = trainNaiveBayes(training)
+    val predictionNaiveBayes = testNaiveBayes(modelNaiveBayes, test)
+    val modelSVM = trainSVM(training)
+    val predictionSVM = testSVM(modelSVM, test)
+    printResults(predictionNullHypothesis, "Null Hypothese")
     printResults(predictionLogisticRegression, "Logistische Regression")
     printResults(predictionLinearRegression, "Lineare Regression")
     printResults(predictionDecisionTree, "Decision Tree")
     printResults(predictionRandomForest, "Random Forest")
+    printResults(predictionNaiveBayes, "Naive Bayes")
+    printResults(predictionSVM, "SVM")
     SparkUtils.close
   }
 
@@ -89,16 +93,31 @@ object ModelTraining {
     (model transform test select("prediction", "label")
       map (r => (if (r(0).toString.toDouble < 0.0058) 0.0 else 1.0) -> r(1).toString.toDouble))
 
-  def trainDecisonTree(training: DataFrame, sc: SparkContext, sql: SQLContext) =
+  def trainDecisonTree(training: DataFrame) =
     DecisionTree trainClassifier (toVectorRDD(training), 2, Map[Int, Int](), "gini", 10, 32)
 
   def testDecisonTree(model: DecisionTreeModel, test: DataFrame) =
     toVectorRDD(test) map (r => (model predict r.features, r.label))
 
-  def trainRandomForest(training: DataFrame, sc: SparkContext, sql: SQLContext) =
-    RandomForest trainClassifier (toVectorRDD(training), 2, Map[Int, Int](), 3, "auto", "gini", 10, 32)
+  def trainRandomForest(training: DataFrame) =
+    RandomForest trainClassifier (toVectorRDD(training), 2, Map[Int, Int](), 30, "auto", "gini", 10, 32)
 
   def testRandomForest(model: RandomForestModel, test: DataFrame) =
+    toVectorRDD(test) map (r => (model predict r.features, r.label))
+
+  def trainNaiveBayes(training: DataFrame) = {
+    val nb = new NaiveBayes
+    nb setSmoothing 5.0
+    nb fit training
+  }
+
+  def testNaiveBayes(model: NaiveBayesModel, test: DataFrame) =
+    model transform test select ("prediction", "label") map (r => r(0).toString.toDouble -> r(1).toString.toDouble)
+
+  def trainSVM(training: DataFrame) =
+    SVMWithSGD train (toVectorRDD(training), 100000, 0.001, 0.8)
+
+  def testSVM(model: SVMModel, test: DataFrame) =
     toVectorRDD(test) map (r => (model predict r.features, r.label))
 
   def printResults(prediction: RDD[(Double, Double)], modelName: String) = {
